@@ -65,14 +65,26 @@ def parse_pdf(file):
 # --- Interface ---
 st.title("📊 Painel Financeiro Interativo")
 
-uploaded = st.file_uploader("Envie CSV ou PDF de extrato bancário", type=["csv","pdf"])
+uploaded = st.file_uploader(
+    "Envie CSV, XLSX ou PDF de extrato bancário", type=["csv","xlsx","xls","pdf"]
+)
 if uploaded:
-    if uploaded.name.lower().endswith('.csv'):
+    fname = uploaded.name.lower()
+    if fname.endswith('.csv'):
         df = pd.read_csv(uploaded, sep=';', encoding='latin1')
         df = parse_csv(df)
-    else:
+    elif fname.endswith(('.xlsx', '.xls')):
+        try:
+            df = pd.read_excel(uploaded, engine='openpyxl')
+        except:
+            df = pd.read_excel(uploaded)
+        df = parse_csv(df)
+    elif fname.endswith('.pdf'):
         df = parse_pdf(uploaded)
         df = parse_csv(df)
+    else:
+        st.error("Formato não suportado. Envie CSV, XLSX ou PDF.")
+        st.stop()
 
     # Filtros na sidebar
     st.sidebar.header("Filtros")
@@ -113,4 +125,4 @@ if uploaded:
     st.subheader("Transações Filtradas")
     st.dataframe(df_filtered)
 else:
-    st.info("Por favor, envie um arquivo CSV ou PDF para começar.")
+    st.info("Por favor, envie um arquivo CSV, XLSX ou PDF para começar.")
