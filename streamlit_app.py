@@ -34,10 +34,11 @@ def parse_csv(df):
     if 'descricao' not in df.columns:
         df['descricao'] = 'N/A'
     if 'tipo' not in df.columns:
+        # Classifica pelo sinal se não houver coluna tipo
         df['tipo'] = df['valor'].apply(lambda x: 'Entrada' if x > 0 else 'Saída')
     if 'categoria' not in df.columns:
         df['categoria'] = 'N/A'
-    # Converte tipos
+    # Converte tipos de dados
     df['data'] = pd.to_datetime(df['data'], dayfirst=True, errors='coerce')
     df['valor'] = pd.to_numeric(df['valor'], errors='coerce').fillna(0.0)
     return df
@@ -84,6 +85,7 @@ uploaded = st.file_uploader(
 )
 
 if uploaded:
+    # Leitura do arquivo
     fname = uploaded.name.lower()
     if fname.endswith('.csv'):
         df = pd.read_csv(uploaded, sep=';', encoding='latin1')
@@ -101,12 +103,23 @@ if uploaded:
         st.error("Formato não suportado. Envie CSV, XLSX ou PDF.")
         st.stop()
 
+    # Ajusta valor segundo o campo 'tipo'
+    # Normaliza 'tipo' removendo acentos e convertendo para lowercase
+    df['tipo'] = df['tipo'].astype(str).apply(
+        lambda x: ''.join(c for c in unicodedata.normalize('NFKD', x) if not unicodedata.combining(c)).lower().strip()
+    )
+    # Define valor negativo para saídas
+    df['valor'] = df.apply(
+        lambda row: -abs(row['valor']) if row['tipo'] == 'saida' else abs(row['valor']),
+        axis=1
+    )
+
     # Filtros na sidebar
     st.sidebar.header("Filtros")
     min_date, max_date = df['data'].min(), df['data'].max()
     start, end = st.sidebar.date_input("Período", [min_date, max_date])
     cat_options = ['All'] + sorted(df['categoria'].unique().tolist())
-    tipo_options = ['All'] + sorted(df['tipo'].unique().tolist())
+    tipo_options = ['All', 'entrada', 'saida']
     selected_cat = st.sidebar.selectbox("Categoria", cat_options)
     selected_tipo = st.sidebar.selectbox("Tipo", tipo_options)
     mask = (df['data'] >= pd.to_datetime(start)) & (df['data'] <= pd.to_datetime(end))
@@ -114,7 +127,7 @@ if uploaded:
     if selected_tipo != 'All': mask &= df['tipo'] == selected_tipo
     df_filtered = df[mask]
 
-    # Métricas
+    # Métricas usando sinal ajustado
     rec = df_filtered[df_filtered['valor'] > 0]['valor'].sum()
     desp = -df_filtered[df_filtered['valor'] < 0]['valor'].sum()
     lucro = rec - desp
