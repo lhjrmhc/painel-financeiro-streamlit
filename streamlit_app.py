@@ -2,21 +2,35 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 import re
+import unicodedata
 from datetime import datetime
 
 st.set_page_config(page_title="Painel Financeiro Interativo", layout="wide")
 
 # --- Funções de processamento ---
+def normalize_columns(columns):
+    # Remove acentos e normaliza para lowercase sem espaços
+    normalized = []
+    for col in columns:
+        if not isinstance(col, str):
+            col = str(col)
+        nfkd = unicodedata.normalize('NFKD', col)
+        only_ascii = ''.join([c for c in nfkd if not unicodedata.combining(c)])
+        normalized.append(only_ascii.lower().strip())
+    return normalized
+
+
 def parse_csv(df):
-    # Garantir colunas essenciais
+    # Normaliza nomes de colunas
+    df.columns = normalize_columns(df.columns)
+    # Verifica colunas essenciais
     if 'data' not in df.columns:
         st.error("CSV inválido: coluna 'data' não encontrada.")
         st.stop()
     if 'valor' not in df.columns:
         st.error("CSV inválido: coluna 'valor' não encontrada.")
         st.stop()
-    # Normaliza
-    df.columns = [c.strip().lower() for c in df.columns]
+    # Garante colunas
     if 'descricao' not in df.columns:
         df['descricao'] = 'N/A'
     if 'tipo' not in df.columns:
@@ -39,7 +53,7 @@ def parse_pdf(file):
     for line in text.splitlines():
         line = line.strip()
         date_match = re.match(r"^(\d{2}/\d{2}/\d{4})$", line)
-        if date_match:
+        if date_match and 'R$' not in line:
             try:
                 current_date = datetime.strptime(date_match.group(1), '%d/%m/%Y')
             except:
@@ -54,7 +68,7 @@ def parse_pdf(file):
                 continue
             desc = line[:val_match.start()].strip() or 'N/A'
             records.append({
-                'data': current_date,
+                'data': current_date.strftime('%d/%m/%Y'),
                 'descricao': desc,
                 'valor': valor,
                 'tipo': 'Entrada' if valor > 0 else 'Saída',
@@ -68,6 +82,7 @@ st.title("📊 Painel Financeiro Interativo")
 uploaded = st.file_uploader(
     "Envie CSV, XLSX ou PDF de extrato bancário", type=["csv","xlsx","xls","pdf"]
 )
+
 if uploaded:
     fname = uploaded.name.lower()
     if fname.endswith('.csv'):
